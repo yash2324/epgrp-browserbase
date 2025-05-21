@@ -86,23 +86,6 @@ export async function main({
     stagehand.log({ message: "Clicked Sign In button" });
 
     // Handle "Enable sign in" checkbox if it appears
-    try {
-      await page.waitForSelector('label:has-text("Enable sign in")', {
-        timeout: 10000,
-      });
-      const enableSignInCheckbox = await page.$(
-        'label:has-text("Enable sign in")'
-      );
-      if (enableSignInCheckbox && (await enableSignInCheckbox.isVisible())) {
-        await enableSignInCheckbox.click();
-        stagehand.log({ message: "Clicked 'Enable sign in' checkbox." });
-      }
-    } catch (e) {
-      stagehand.log({
-        message:
-          "'Enable sign in' checkbox not found or not interactable, proceeding.",
-      });
-    }
 
     await page.waitForURL(
       "https://europackaging.quickbase.com/nav/main/action/myqb"
@@ -121,15 +104,16 @@ export async function main({
     });
 
     // 3. Open SOS Costings
+    await page.waitForTimeout(10000);
     const [sosCostingsAction] = await page.observe({
       instruction: 'Find and click the "SOS Costings" link or button',
     });
     await page.act(sosCostingsAction);
-    // await page.click('text="SOS Costings"'); // Original line
 
     stagehand.log({ message: "Opened 'SOS Costings' section" });
 
     // 4. Create New Costing
+    await page.waitForTimeout(5000);
     const [newCostingAction] = await page.observe({
       instruction: "Find and click the New SOS costing button",
     });
@@ -137,6 +121,7 @@ export async function main({
     stagehand.log({ message: "Clicked 'New SOS costing' button" });
 
     // 5. Collapse
+    await page.waitForTimeout(5000);
     try {
       const [collapseAction] = await page.observe({
         instruction: 'Find and click the "Collapse Side Panel" button',
@@ -158,6 +143,7 @@ export async function main({
 
     // Description
     try {
+      await page.waitForTimeout(5000);
       const instruction = 'Find the input field labeled "Description"';
       stagehand.log({ message: `Attempting to observe: ${instruction}` });
       const [field] = await page.observe({ instruction });
