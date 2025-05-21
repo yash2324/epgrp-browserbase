@@ -1,5 +1,5 @@
 import { Stagehand, Page, BrowserContext } from "@browserbasehq/stagehand";
-import StagehandConfig from "./stagehand.config.js";
+import StagehandConfig from "../../stagehand.config.js";
 import chalk from "chalk";
 import boxen from "boxen";
 // Commenting out unused utils, can be restored if needed
@@ -36,14 +36,18 @@ const costSummarySchema = z.object({
   overhead_cost: z.string().optional().default("0.00"),
 });
 
-async function main({
+export async function main({
   page,
   context,
   stagehand,
+  formData,
+  costOverrides,
 }: {
   page: Page;
   context: BrowserContext;
   stagehand: Stagehand;
+  formData: FormData;
+  costOverrides: CostOverride[];
 }) {
   const QB_USERID = process.env.QB_USERID;
   const QB_PASSWORD = process.env.QB_PASSWORD;
@@ -57,24 +61,7 @@ async function main({
     throw new Error(errorMessage);
   }
 
-  // Sample data - in a real scenario, this would likely be passed as arguments or loaded
-  const formData: FormData = {
-    Description: "Test costing from Stagehand TS",
-    "Bag type": "SOS Standard", // Example: Ensure this is a valid text of an option
-    "Face Width mm": "120",
-    "Gusset mm": "60",
-    "Bag Length mm": "220",
-    "Bottom glue": "Standard Glue",
-    "Packed in": "Carton",
-    "Pack size": "500",
-    "No of packs ordered": "10",
-    Machine: "Machine A", // Example: Ensure this is a valid text of an option
-    "Machines per supervisor": "3",
-  };
-
-  const costOverrides: CostOverride[] = [
-    { field: "bag_paper_price_override", value: "0.25" },
-  ];
+  // Removed the extra closing brace that was here
 
   let bagPaperPriceOverride: string | number | undefined;
   if (costOverrides) {
@@ -154,7 +141,7 @@ async function main({
     await page.act(newCostingAction);
     stagehand.log({ message: "Clicked 'New SOS costing' button" });
 
-    // 5. Collapse Side Panel (optional)
+    // 5. Collapse
     try {
       const [collapseAction] = await page.observe({
         instruction: 'Find and click the "Collapse Side Panel" button',
@@ -290,50 +277,50 @@ async function main({
     // BAG PAPER (select first option)
     try {
       stagehand.log({ message: "Attempting to select BAG PAPER" });
-      // 1. Click the BAG PAPER input/search bar to reveal options
-      const [bagPaperInput] = await page.observe({
-        instruction: 'Find the input field or dropdown for "BAG PAPER"',
-      });
-      if (bagPaperInput && bagPaperInput.selector) {
-        await page.waitForSelector(bagPaperInput.selector, { timeout: 10000 });
-        await page.act(bagPaperInput);
-        stagehand.log({ message: "Clicked BAG PAPER input/search bar" });
-        await page.waitForTimeout(2000); // Wait for options to load
+      // Click the input to focus it
+      await page.act('Click the input field labeled "BAG PAPER"');
+      await page.waitForTimeout(500);
 
-        // 2. Click the first option from the revealed list
-        // Assuming the first option is identifiable, e.g., by being the first in a list or a specific role/text
-        // This instruction might need refinement based on the actual HTML structure of the dropdown options
-        const [firstBagPaperOption] = await page.observe({
-          instruction: "Find the first option in the BAG PAPER dropdown list",
-        });
-        if (firstBagPaperOption && firstBagPaperOption.selector) {
-          await page.waitForSelector(firstBagPaperOption.selector, {
-            timeout: 10000,
-          });
-          await page.act(firstBagPaperOption);
-          stagehand.log({ message: "Selected the first option for BAG PAPER" });
-        } else {
-          stagehand.log({
-            message:
-              "Could not observe the first option for BAG PAPER. Attempting generic click.",
-          });
-          // Fallback: try a more generic click if specific observation fails
-          await page.act(
-            "Click the first available option in the dropdown list below BAG PAPER"
-          );
-        }
-        await page.waitForTimeout(500);
-      } else {
-        stagehand.log({
-          message: "Could not observe the BAG PAPER input field. Skipping.",
-        });
-      }
+      // Type a space to trigger the dropdown
+      await page.act('Type " " into the "BAG PAPER" input');
+      await page.waitForTimeout(500);
+      await page.keyboard.press("Enter");
+
+      stagehand.log({ message: "Selected first option for BAG PAPER" });
+      await page.waitForTimeout(1000);
     } catch (error: any) {
       stagehand.log({
         message: `Error selecting first option for "BAG PAPER": ${error.message}`,
       });
     }
-
+    try {
+      if (bagPaperPriceOverride !== undefined) {
+        const instruction =
+          'Find the input field labeled "Bag Paper Price Override"';
+        stagehand.log({ message: `Attempting to observe: ${instruction}` });
+        const [field] = await page.observe({ instruction });
+        if (field && field.selector) {
+          await page.waitForSelector(field.selector, { timeout: 15000 });
+          await page.fill(field.selector, String(bagPaperPriceOverride));
+          stagehand.log({
+            message: `Filled "Bag Paper Price Override" with "${bagPaperPriceOverride}"`,
+          });
+          await page.waitForTimeout(500);
+        } else {
+          stagehand.log({
+            message: `Could not observe: ${instruction}. Skipping.`,
+          });
+        }
+      } else {
+        stagehand.log({
+          message: "No bag paper price override value provided, skipping.",
+        });
+      }
+    } catch (error: any) {
+      stagehand.log({
+        message: `Error with "Bag Paper Price Override": ${error.message}`,
+      });
+    }
     // Packed in (select "Box")
     try {
       const instruction = 'Find the dropdown menu labeled "Packed in"';
@@ -359,42 +346,21 @@ async function main({
     // Box type (select first option, appears after "Packed in" is "Box")
     try {
       stagehand.log({ message: "Attempting to select Box type" });
-      // 1. Click the Box type input/search bar to reveal options
-      const [boxTypeInput] = await page.observe({
-        instruction: 'Find the input field or dropdown for "Box type"',
-      });
-      if (boxTypeInput && boxTypeInput.selector) {
-        await page.waitForSelector(boxTypeInput.selector, { timeout: 10000 });
-        await page.act(boxTypeInput);
-        stagehand.log({ message: "Clicked Box type input/search bar" });
-        await page.waitForTimeout(2000); // Wait for options to load
+      // Click the input to focus it
+      await page.act('Click the input field labeled "Box type"');
+      await page.waitForTimeout(500);
 
-        // 2. Click the first option from the revealed list
-        const [firstBoxTypeOption] = await page.observe({
-          instruction: "Find the first option in the Box type dropdown list",
-        });
-        if (firstBoxTypeOption && firstBoxTypeOption.selector) {
-          await page.waitForSelector(firstBoxTypeOption.selector, {
-            timeout: 10000,
-          });
-          await page.act(firstBoxTypeOption);
-          stagehand.log({ message: "Selected the first option for Box type" });
-        } else {
-          stagehand.log({
-            message:
-              "Could not observe the first option for Box type. Attempting generic click.",
-          });
-          // Fallback: try a more generic click
-          await page.act(
-            "Click the first available option in the dropdown list below Box type"
-          );
-        }
-        await page.waitForTimeout(500);
-      } else {
-        stagehand.log({
-          message: "Could not observe the Box type input field. Skipping.",
-        });
-      }
+      // Type a space to trigger the dropdown
+      await page.act('Type " " into the "Box type" input');
+      await page.waitForTimeout(1000);
+
+      // Press ArrowDown and Enter to select the first option
+      await page.keyboard.press("ArrowDown");
+      await page.waitForTimeout(500);
+      await page.keyboard.press("Enter");
+
+      stagehand.log({ message: "Selected first option for Box type" });
+      await page.waitForTimeout(1000);
     } catch (error: any) {
       stagehand.log({
         message: `Error selecting first option for "Box type": ${error.message}`,
@@ -473,6 +439,7 @@ async function main({
       });
     }
     await page.act("scroll to the bottom of the page");
+    await page.act("scroll the modal to the next chunk");
     // Section 3: Production data
     stagehand.log({ message: "Filling Section 3: Production data" });
 
@@ -525,141 +492,128 @@ async function main({
     // The old bagPaperPriceOverride logic is also removed as per the new structured approach.
 
     // 7. Scroll to bottom
-    await page.act("scroll to the bottom of the page");
     await page.waitForTimeout(1000);
     stagehand.log({ message: "Scrolled to bottom of the page" });
 
     // 8. Extract cost summary data
     stagehand.log({ message: "Extracting cost summary data" });
-    const extractionSelectors = {
-      cost_per_case: 'input[aria-label="Cost £/case"]',
-      labour_cost_per_job: 'input[aria-label="Total Labour & Sup\'n £/job"]',
-      overhead_cost: 'input[aria-label="Overhead Cost/job"]',
-    };
+    try {
+      // First attempt: Try XPath approach
+      const costResults = await Promise.all<string>([
+        // Cost £/case
+        page.evaluate(() => {
+          const el =
+            document.evaluate(
+              '//td[contains(., "Cost £/case")]/following-sibling::td[1]',
+              document,
+              null,
+              XPathResult.FIRST_ORDERED_NODE_TYPE,
+              null
+            ).singleNodeValue || document.getElementById("tdf_153");
 
-    const extractedValues: any = {}; // Using any for flexibility before parsing
-    for (const key of Object.keys(extractionSelectors) as Array<
-      keyof typeof extractionSelectors
-    >) {
-      const selector = extractionSelectors[key];
-      try {
-        await page.waitForSelector(selector, { timeout: 10000 });
-        const element = await page.$(selector);
-        if (element) {
-          extractedValues[key] =
-            (await element.getAttribute("value")) || "0.00";
-        } else {
-          stagehand.log({
-            message: `Element for ${key} (selector: ${selector}) not found. Defaulting to '0.00'.`,
-          }); // Fixed: Use LogLevel type
-          extractedValues[key] = "0.00";
-        }
-      } catch (error: any) {
+          return el?.textContent?.trim().replace(/[^0-9.]/g, "") || "0";
+        }),
+        // Total Labour & Sup'n £/job
+        page.evaluate(() => {
+          const el =
+            document.evaluate(
+              '//td[contains(., "Total Labour & Sup")]/following-sibling::td[1]',
+              document,
+              null,
+              XPathResult.FIRST_ORDERED_NODE_TYPE,
+              null
+            ).singleNodeValue || document.getElementById("tdf_137");
+
+          return el?.textContent?.trim().replace(/[^0-9.]/g, "") || "0";
+        }),
+        // Overhead Cost/job
+        page.evaluate(() => {
+          const el =
+            document.evaluate(
+              '//td[contains(., "Overhead Cost/job")]/following-sibling::td[1]',
+              document,
+              null,
+              XPathResult.FIRST_ORDERED_NODE_TYPE,
+              null
+            ).singleNodeValue || document.getElementById("tdf_142");
+
+          return el?.textContent?.trim().replace(/[^0-9.]/g, "") || "0";
+        }),
+      ]);
+
+      stagehand.log({
+        message: `Raw cost values: ${JSON.stringify(costResults, null, 2)}`,
+      });
+
+      // If all values are still 0, try direct ID approach as last resort
+      if (costResults.every((val) => parseFloat(val) === 0)) {
         stagehand.log({
-          message: `Error extracting ${key} (selector: ${selector}): ${error.message}. Defaulting to '0.00'.`,
-        }); // Fixed: Use LogLevel type
-        extractedValues[key] = "0.00";
+          message: "Primary extraction failed, trying direct ID approach",
+        });
+
+        const directResults = await Promise.all<string>([
+          page.evaluate(() => {
+            const el = document.getElementById("tdf_153");
+            return el?.textContent?.trim().replace(/[^0-9.]/g, "") || "0";
+          }),
+          page.evaluate(() => {
+            const el = document.getElementById("tdf_137");
+            return el?.textContent?.trim().replace(/[^0-9.]/g, "") || "0";
+          }),
+          page.evaluate(() => {
+            const el = document.getElementById("tdf_142");
+            return el?.textContent?.trim().replace(/[^0-9.]/g, "") || "0";
+          }),
+        ]);
+
+        if (directResults.some((val) => parseFloat(val) > 0)) {
+          stagehand.log({
+            message: `Direct ID extraction succeeded: ${JSON.stringify(
+              directResults,
+              null,
+              2
+            )}`,
+          });
+          costResults.splice(0, costResults.length, ...directResults);
+        }
       }
-    }
 
-    const parsedResult = costSummarySchema.safeParse(extractedValues);
-
-    if (parsedResult.success) {
-      stagehand.log({
-        message: "Successfully extracted and parsed cost summary",
-        auxiliary: {
-          data: { value: JSON.stringify(parsedResult.data), type: "object" },
-        },
-      });
-      console.log(chalk.green("Extracted Cost Summary:"), parsedResult.data);
-    } else {
-      stagehand.log({
-        message: "Failed to parse extracted cost summary",
-        auxiliary: {
-          errors: {
-            value: JSON.stringify(parsedResult.error.issues),
-            type: "object",
-          },
-          raw_values: {
-            value: JSON.stringify(extractedValues),
-            type: "object",
-          },
-        },
-      });
-      console.error(
-        chalk.red("Failed to parse extracted data:"),
-        parsedResult.error.issues
+      const [materialCost, productionCost, overheadCost] = costResults.map(
+        (val) => parseFloat(val) || 0
       );
-      console.error(chalk.red("Raw extracted values:"), extractedValues);
+
+      stagehand.log({
+        message: `Parsed cost values:
+          Material Cost: ${materialCost}
+          Production Cost: ${productionCost}
+          Overhead Cost: ${overheadCost}`,
+      });
+
+      // Create the cost summary object
+      const costSummary = {
+        totalMaterialCost: materialCost,
+        totalProductionCost: productionCost,
+        totalCostPer1000: overheadCost,
+        pricePer1000: overheadCost * 1.1, // 10% markup
+      };
+
+      stagehand.log({
+        message: `Final cost summary: ${JSON.stringify(costSummary, null, 2)}`,
+      });
+
+      return costSummary;
+    } catch (error: any) {
+      stagehand.log({
+        message: `Error extracting cost summary data: ${error.message}`,
+      });
+      throw error;
+    } finally {
+      await stagehand.close();
     }
   } catch (error: any) {
     stagehand.log({
-      message: `Critical error in QuickBase automation: ${error.message}`,
-      auxiliary: { stack: { value: error.stack || "N/A", type: "string" } },
+      message: `Error in main function: ${error.message}`,
     });
-    console.error(
-      chalk.bgRed.white(
-        `Critical error during QuickBase processing: ${error.message}`
-      )
-    );
-    // Depending on desired behavior, you might want to re-throw to stop execution
-    // throw error;
+    throw error;
   }
 }
-
-/**
- * This is the main function that runs when you do npm run start
- *
- * YOU PROBABLY DON'T NEED TO MODIFY ANYTHING BELOW THIS POINT!
- *
- */
-async function run() {
-  const stagehand = new Stagehand({
-    ...StagehandConfig,
-  });
-  await stagehand.init();
-
-  if (StagehandConfig.env === "BROWSERBASE" && stagehand.browserbaseSessionID) {
-    console.log(
-      boxen(
-        `View this session live in your browser: \n${chalk.blue(
-          `https://browserbase.com/sessions/${stagehand.browserbaseSessionID}`
-        )}`,
-        {
-          title: "Browserbase",
-          padding: 1,
-          margin: 3,
-        }
-      )
-    );
-  }
-
-  if (!stagehand.page || !stagehand.context) {
-    console.error(
-      chalk.red("Stagehand page or context not initialized. Exiting.")
-    );
-    await stagehand.close(); // Attempt to close even if init failed partially
-    return;
-  }
-
-  await main({
-    page: stagehand.page,
-    context: stagehand.context,
-    stagehand,
-  });
-
-  await stagehand.close();
-  console.log(
-    `\n🤘 Thanks so much for using Stagehand! Reach out to us on Slack if you have any feedback: ${chalk.blue(
-      "https://stagehand.dev/slack"
-    )}\n`
-  );
-}
-
-run().catch((error) => {
-  console.error(
-    chalk.bgRed.white(`Unhandled error in run function: ${error.message}`)
-  );
-  console.error(error.stack);
-  process.exit(1);
-});
