@@ -1,9 +1,9 @@
 import express from "express";
 import AWS from "aws-sdk";
 import { Stagehand } from "@browserbasehq/stagehand";
-import StagehandConfig from "../../../stagehand.config.js";
+import StagehandConfig from "../../stagehand.config.js";
 import { main as runBrowserbaseAutomation } from "../../lib/automation.js";
-import { CostingRequestPayload, CostSummary } from "../types.js";
+import { CostingRequestPayload } from "../types.js";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -21,7 +21,7 @@ const ses = new AWS.SES();
 
 async function sendCostingSummaryEmail(
   toEmail: string,
-  costSummary: CostSummary,
+  costSummary: any,
   specSheetId: string
 ): Promise<void> {
   const params = {
@@ -39,29 +39,24 @@ async function sendCostingSummaryEmail(
                                 <th style="padding: 12px; border: 1px solid #ddd; text-align: right;">Amount</th>
                             </tr>
                             <tr>
-                                <td style="padding: 12px; border: 1px solid #ddd;">Total Material Cost</td>
-                                <td style="padding: 12px; border: 1px solid #ddd; text-align: right;">£${costSummary.totalMaterialCost.toFixed(
+                                <td style="padding: 12px; border: 1px solid #ddd;">Cost/€ Case</td>
+                                <td style="padding: 12px; border: 1px solid #ddd; text-align: right;">£${costSummary.Costcase.toFixed(
                                   2
                                 )}</td>
                             </tr>
                             <tr>
-                                <td style="padding: 12px; border: 1px solid #ddd;">Total Production Cost</td>
-                                <td style="padding: 12px; border: 1px solid #ddd; text-align: right;">£${costSummary.totalProductionCost.toFixed(
+                                <td style="padding: 12px; border: 1px solid #ddd;">Total Labour & Sup</td>
+                                <td style="padding: 12px; border: 1px solid #ddd; text-align: right;">£${costSummary.totalLabour.toFixed(
                                   2
                                 )}</td>
                             </tr>
                             <tr>
-                                <td style="padding: 12px; border: 1px solid #ddd;">Total Cost/1000 bags</td>
-                                <td style="padding: 12px; border: 1px solid #ddd; text-align: right;">£${costSummary.totalCostPer1000.toFixed(
+                                <td style="padding: 12px; border: 1px solid #ddd;">Overhead Cost/ Job</td>
+                                <td style="padding: 12px; border: 1px solid #ddd; text-align: right;">£${costSummary.OverheadCostperjob.toFixed(
                                   2
                                 )}</td>
                             </tr>
-                            <tr>
-                                <td style="padding: 12px; border: 1px solid #ddd;">Price/1000 bags</td>
-                                <td style="padding: 12px; border: 1px solid #ddd; text-align: right;">£${costSummary.pricePer1000.toFixed(
-                                  2
-                                )}</td>
-                            </tr>
+                           
                         </table>
                     `,
         },

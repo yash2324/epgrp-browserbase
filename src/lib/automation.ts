@@ -1,9 +1,4 @@
 import { Stagehand, Page, BrowserContext } from "@browserbasehq/stagehand";
-import StagehandConfig from "../../stagehand.config.js";
-import chalk from "chalk";
-import boxen from "boxen";
-// Commenting out unused utils, can be restored if needed
-// import { drawObserveOverlay, clearOverlays, actWithCache } from "./utils.js";
 import { z } from "zod";
 import dotenv from "dotenv";
 
@@ -487,11 +482,6 @@ export async function main({
       });
     }
 
-    // Remove the old dynamic filling loop and bagPaperPriceOverride logic
-    // The old for...of Object.entries(formData) loop is now replaced by the section-based filling above.
-    // The old bagPaperPriceOverride logic is also removed as per the new structured approach.
-
-    // 7. Scroll to bottom
     await page.waitForTimeout(1000);
     stagehand.log({ message: "Scrolled to bottom of the page" });
 
@@ -578,23 +568,22 @@ export async function main({
         }
       }
 
-      const [materialCost, productionCost, overheadCost] = costResults.map(
+      const [Costcase, totalLabour, overheadCost] = costResults.map(
         (val) => parseFloat(val) || 0
       );
 
       stagehand.log({
         message: `Parsed cost values:
-          Material Cost: ${materialCost}
-          Production Cost: ${productionCost}
-          Overhead Cost: ${overheadCost}`,
+          Cost per case: ${Costcase}
+          Total Labour & Sup: ${totalLabour}
+          Overhead Cost per job: ${overheadCost}`,
       });
 
       // Create the cost summary object
       const costSummary = {
-        totalMaterialCost: materialCost,
-        totalProductionCost: productionCost,
-        totalCostPer1000: overheadCost,
-        pricePer1000: overheadCost * 1.1, // 10% markup
+        Costcase: Costcase,
+        totalLabour: totalLabour,
+        OverheadCostperjob: overheadCost,
       };
 
       stagehand.log({

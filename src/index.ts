@@ -1,6 +1,6 @@
 import { main as runAutomation } from "./lib/automation.js";
 import { Stagehand } from "@browserbasehq/stagehand";
-import StagehandConfig from "../stagehand.config.js";
+import StagehandConfig from "./stagehand.config.js";
 
 export async function calculateCosts(formData: any, costOverrides: any) {
   const stagehand = new Stagehand({

@@ -4,7 +4,8 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx watch src/api/server.ts",
-    "postinstall": "playwright install"
+    "postinstall": "playwright install",
+    "start": "node dist/api/server.js"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.22",

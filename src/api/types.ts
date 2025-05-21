@@ -24,10 +24,3 @@ export interface CostingRequestPayload {
   sender_email: string;
   spec_sheet_id: string;
 }
-
-export interface CostSummary {
-  totalMaterialCost: number;
-  totalProductionCost: number;
-  totalCostPer1000: number;
-  pricePer1000: number;
-}
