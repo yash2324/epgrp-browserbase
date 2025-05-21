@@ -112,9 +112,6 @@ router.post("/calculate-costs", async (req, res) => {
     // Send email with results
     await sendCostingSummaryEmail(sender_email, costSummary, spec_sheet_id);
 
-    // Close stagehand
-    await stagehand.close();
-
     res.json({
       success: true,
       message: "Costing calculation completed and email sent",
