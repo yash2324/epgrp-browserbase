@@ -135,13 +135,18 @@ export async function main({
       });
     }
 
+    // Helper function to extract numeric values
+    const extractNumeric = (value: string): string => {
+      return value.replace(/[^0-9.]/g, "");
+    };
+
     // 6. Fill the Form
     stagehand.log({ message: "Starting structured form filling" });
 
     // Section 1: Finished Bag Information
     stagehand.log({ message: "Filling Section 1: Finished Bag Information" });
 
-    // Description
+    // Description (non-numeric, keep as is)
     try {
       await page.waitForTimeout(5000);
       const instruction = 'Find the input field labeled "Description"';
@@ -185,16 +190,17 @@ export async function main({
       stagehand.log({ message: `Error with "Bag type": ${error.message}` });
     }
 
-    // Face Width mm
+    // Face Width mm (numeric)
     try {
       const instruction = 'Find the input field labeled "Face Width mm"';
       stagehand.log({ message: `Attempting to observe: ${instruction}` });
       const [field] = await page.observe({ instruction });
       if (field && field.selector) {
         await page.waitForSelector(field.selector, { timeout: 15000 });
-        await page.fill(field.selector, formData["Face Width mm"]);
+        const numericValue = extractNumeric(formData["Face Width mm"]);
+        await page.fill(field.selector, numericValue);
         stagehand.log({
-          message: `Filled "Face Width mm" with "${formData["Face Width mm"]}"`,
+          message: `Filled "Face Width mm" with "${numericValue}"`,
         });
         await page.waitForTimeout(500);
       } else {
@@ -208,16 +214,17 @@ export async function main({
       });
     }
 
-    // Gusset mm
+    // Gusset mm (numeric)
     try {
       const instruction = 'Find the input field labeled "Gusset mm"';
       stagehand.log({ message: `Attempting to observe: ${instruction}` });
       const [field] = await page.observe({ instruction });
       if (field && field.selector) {
         await page.waitForSelector(field.selector, { timeout: 15000 });
-        await page.fill(field.selector, formData["Gusset mm"]);
+        const numericValue = extractNumeric(formData["Gusset mm"]);
+        await page.fill(field.selector, numericValue);
         stagehand.log({
-          message: `Filled "Gusset mm" with "${formData["Gusset mm"]}"`,
+          message: `Filled "Gusset mm" with "${numericValue}"`,
         });
         await page.waitForTimeout(500);
       } else {
@@ -229,16 +236,17 @@ export async function main({
       stagehand.log({ message: `Error with "Gusset mm": ${error.message}` });
     }
 
-    // Bag Length mm
+    // Bag Length mm (numeric)
     try {
       const instruction = 'Find the input field labeled "Bag Length mm"';
       stagehand.log({ message: `Attempting to observe: ${instruction}` });
       const [field] = await page.observe({ instruction });
       if (field && field.selector) {
         await page.waitForSelector(field.selector, { timeout: 15000 });
-        await page.fill(field.selector, formData["Bag Length mm"]);
+        const numericValue = extractNumeric(formData["Bag Length mm"]);
+        await page.fill(field.selector, numericValue);
         stagehand.log({
-          message: `Filled "Bag Length mm" with "${formData["Bag Length mm"]}"`,
+          message: `Filled "Bag Length mm" with "${numericValue}"`,
         });
         await page.waitForTimeout(500);
       } else {
@@ -348,18 +356,17 @@ export async function main({
       });
     }
 
-    // Bags per box
+    // Bags per box (numeric)
     try {
       const instruction = 'Find the input field labeled "Bags per box"';
-      // Assuming formData has a key like "Bags per box" or you have a default/derived value
-      const valueToFill = formData["Pack size"]; // Example: Reusing "Pack size" as per original Python logic for 'Pack size'
+      const numericValue = extractNumeric(formData["Pack size"]);
       stagehand.log({ message: `Attempting to observe: ${instruction}` });
       const [field] = await page.observe({ instruction });
       if (field && field.selector) {
         await page.waitForSelector(field.selector, { timeout: 15000 });
-        await page.fill(field.selector, valueToFill);
+        await page.fill(field.selector, numericValue);
         stagehand.log({
-          message: `Filled "Bags per box" with "${valueToFill}"`,
+          message: `Filled "Bags per box" with "${numericValue}"`,
         });
         await page.waitForTimeout(500);
       } else {
@@ -371,18 +378,17 @@ export async function main({
       stagehand.log({ message: `Error with "Bags per box": ${error.message}` });
     }
 
-    // No of Boxes Ordered
+    // No of Boxes Ordered (numeric)
     try {
       const instruction = 'Find the input field labeled "No of Boxes Ordered"';
-      // Assuming formData has a key like "No of Boxes Ordered" or similar
-      const valueToFill = formData["No of packs ordered"]; // Example: Reusing "No of packs ordered"
+      const numericValue = extractNumeric(formData["No of packs ordered"]);
       stagehand.log({ message: `Attempting to observe: ${instruction}` });
       const [field] = await page.observe({ instruction });
       if (field && field.selector) {
         await page.waitForSelector(field.selector, { timeout: 15000 });
-        await page.fill(field.selector, valueToFill);
+        await page.fill(field.selector, numericValue);
         stagehand.log({
-          message: `Filled "No of Boxes Ordered" with "${valueToFill}"`,
+          message: `Filled "No of Boxes Ordered" with "${numericValue}"`,
         });
         await page.waitForTimeout(500);
       } else {
@@ -396,10 +402,10 @@ export async function main({
       });
     }
 
-    // Boxes per Pallet
+    // Boxes per Pallet (numeric)
     try {
       const instruction = 'Find the input field labeled "Boxes per Pallet"';
-      const valueToFill = "10"; // Example: Default or derived value, update as needed
+      const valueToFill = "10"; // This is already numeric
       stagehand.log({ message: `Attempting to observe: ${instruction}` });
       const [field] = await page.observe({ instruction });
       if (field && field.selector) {
@@ -419,6 +425,7 @@ export async function main({
         message: `Error with "Boxes per Pallet": ${error.message}`,
       });
     }
+
     await page.act("scroll to the bottom of the page");
     await page.act("scroll the modal to the next chunk");
     // Section 3: Production data
