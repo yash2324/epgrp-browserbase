@@ -579,6 +579,141 @@ export async function main({
         OverheadCostperjob: overheadCost,
       };
 
+      // Validate if any cost values are zero and attempt to fix
+      if (Costcase === 0 || totalLabour === 0 || overheadCost === 0) {
+        stagehand.log({
+          message:
+            "Detected zero values in cost summary. Attempting to validate and fix entries...",
+        });
+
+        // Re-verify all critical fields in Finished Bag Information
+        const criticalFields = [
+          "Face Width mm",
+          "Gusset mm",
+          "Bag Length mm",
+          "Bags per box",
+          "No of Boxes Ordered",
+        ];
+
+        for (const fieldName of criticalFields) {
+          try {
+            const instruction = `Find the input field labeled "${fieldName}"`;
+            const [field] = await page.observe({ instruction });
+
+            if (field && field.selector) {
+              const currentValue = await page.$eval(
+                field.selector,
+                (el: any) => el.value
+              );
+              if (!currentValue || currentValue === "0") {
+                stagehand.log({
+                  message: `Found empty/zero value for ${fieldName}, attempting to re-enter`,
+                });
+
+                // Re-enter the value based on formData
+                let valueToEnter = "";
+                if (fieldName === "Bags per box") {
+                  valueToEnter = extractNumeric(formData["Pack size"]);
+                } else if (fieldName === "No of Boxes Ordered") {
+                  valueToEnter = extractNumeric(
+                    formData["No of packs ordered"]
+                  );
+                } else {
+                  valueToEnter = extractNumeric(
+                    formData[fieldName as keyof FormData] || ""
+                  );
+                }
+
+                if (valueToEnter) {
+                  await page.fill(field.selector, valueToEnter);
+                  stagehand.log({
+                    message: `Re-entered ${fieldName} with ${valueToEnter}`,
+                  });
+                  await page.waitForTimeout(500);
+                }
+              }
+            }
+          } catch (error: any) {
+            stagehand.log({
+              message: `Error validating ${fieldName}: ${error.message}`,
+            });
+          }
+        }
+
+        // Re-verify BAG PAPER selection
+        try {
+          const instruction = 'Find the input field containing "BAG PAPER"';
+          const [field] = await page.observe({ instruction });
+
+          if (field && field.selector) {
+            const currentValue = await page.$eval(
+              field.selector,
+              (el: any) => el.value
+            );
+            if (!currentValue) {
+              stagehand.log({
+                message: "BAG PAPER not selected, attempting to re-select",
+              });
+              await page.act('Click the input field labeled "BAG PAPER"');
+              await page.waitForTimeout(500);
+              await page.act('Type " " into the "BAG PAPER" input');
+              await page.waitForTimeout(500);
+              await page.keyboard.press("Enter");
+              await page.waitForTimeout(1000);
+            }
+          }
+        } catch (error: any) {
+          stagehand.log({
+            message: `Error validating BAG PAPER: ${error.message}`,
+          });
+        }
+
+        // Wait for recalculation and try to get the values again
+        await page.waitForTimeout(2000);
+
+        // Re-fetch the cost values
+        const [newCostcase, newTotalLabour, newOverheadCost] =
+          await Promise.all([
+            page.evaluate(() => {
+              const el = document.getElementById("tdf_153");
+              return (
+                parseFloat(
+                  el?.textContent?.trim().replace(/[^0-9.]/g, "") || "0"
+                ) || 0
+              );
+            }),
+            page.evaluate(() => {
+              const el = document.getElementById("tdf_137");
+              return (
+                parseFloat(
+                  el?.textContent?.trim().replace(/[^0-9.]/g, "") || "0"
+                ) || 0
+              );
+            }),
+            page.evaluate(() => {
+              const el = document.getElementById("tdf_142");
+              return (
+                parseFloat(
+                  el?.textContent?.trim().replace(/[^0-9.]/g, "") || "0"
+                ) || 0
+              );
+            }),
+          ]);
+
+        // Update cost summary with new values
+        costSummary.Costcase = newCostcase || Costcase;
+        costSummary.totalLabour = newTotalLabour || totalLabour;
+        costSummary.OverheadCostperjob = newOverheadCost || overheadCost;
+
+        stagehand.log({
+          message: `Updated cost summary after validation: ${JSON.stringify(
+            costSummary,
+            null,
+            2
+          )}`,
+        });
+      }
+
       stagehand.log({
         message: `Final cost summary: ${JSON.stringify(costSummary, null, 2)}`,
       });
