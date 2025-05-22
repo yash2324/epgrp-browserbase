@@ -670,7 +670,33 @@ export async function main({
 
         // Wait for recalculation and try to get the values again
         await page.waitForTimeout(2000);
+        try {
+          const instruction = 'Find the input field containing "Box Type*"';
+          const [field] = await page.observe({ instruction });
 
+          if (field && field.selector) {
+            const currentValue = await page.$eval(
+              field.selector,
+              (el: any) => el.value
+            );
+            if (!currentValue) {
+              stagehand.log({
+                message: "Box Type not selected, attempting to re-select",
+              });
+              await page.act('Click the input field labeled "Box Type*"');
+              await page.waitForTimeout(500);
+              await page.act('Type " " into the "Box Type" input');
+              await page.waitForTimeout(500);
+              await page.keyboard.press("Enter");
+              await page.waitForTimeout(1000);
+            }
+          }
+        } catch (error: any) {
+          stagehand.log({
+            message: `Error validating Box Type: ${error.message}`,
+          });
+        }
+        await page.waitForTimeout(5000);
         // Re-fetch the cost values
         const [newCostcase, newTotalLabour, newOverheadCost] =
           await Promise.all([
