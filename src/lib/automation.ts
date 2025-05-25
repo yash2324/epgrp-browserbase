@@ -31,6 +31,267 @@ const costSummarySchema = z.object({
   overhead_cost: z.string().optional().default("0.00"),
 });
 
+// Helper function to extract numeric values
+const extractNumeric = (value: string): string => {
+  return value.replace(/[^0-9.]/g, "");
+};
+
+// Helper function to extract and validate cost summary
+async function extractAndValidateCostSummary({
+  page,
+  formData,
+  stagehand,
+}: {
+  page: Page;
+  formData: FormData;
+  stagehand: Stagehand;
+}): Promise<{
+  Costcase: number;
+  totalLabour: number;
+  OverheadCostperjob: number;
+}> {
+  // Extract cost summary data
+  const getCostValues = async () => {
+    // First attempt: Try XPath approach
+    const costResults = await Promise.all<string>([
+      // Cost £/case
+      page.evaluate(() => {
+        const el =
+          document.evaluate(
+            '//td[contains(., "Cost £/case")]/following-sibling::td[1]',
+            document,
+            null,
+            XPathResult.FIRST_ORDERED_NODE_TYPE,
+            null
+          ).singleNodeValue || document.getElementById("tdf_153");
+        return el?.textContent?.trim().replace(/[^0-9.]/g, "") || "0";
+      }),
+      // Total Labour & Sup'n £/job
+      page.evaluate(() => {
+        const el =
+          document.evaluate(
+            '//td[contains(., "Total Labour & Sup")]/following-sibling::td[1]',
+            document,
+            null,
+            XPathResult.FIRST_ORDERED_NODE_TYPE,
+            null
+          ).singleNodeValue || document.getElementById("tdf_137");
+        return el?.textContent?.trim().replace(/[^0-9.]/g, "") || "0";
+      }),
+      // Overhead Cost/job
+      page.evaluate(() => {
+        const el =
+          document.evaluate(
+            '//td[contains(., "Overhead Cost/job")]/following-sibling::td[1]',
+            document,
+            null,
+            XPathResult.FIRST_ORDERED_NODE_TYPE,
+            null
+          ).singleNodeValue || document.getElementById("tdf_142");
+        return el?.textContent?.trim().replace(/[^0-9.]/g, "") || "0";
+      }),
+    ]);
+    // If all values are still 0, try direct ID approach as last resort
+    if (costResults.every((val) => parseFloat(val) === 0)) {
+      const directResults = await Promise.all<string>([
+        page.evaluate(() => {
+          const el = document.getElementById("tdf_153");
+          return el?.textContent?.trim().replace(/[^0-9.]/g, "") || "0";
+        }),
+        page.evaluate(() => {
+          const el = document.getElementById("tdf_137");
+          return el?.textContent?.trim().replace(/[^0-9.]/g, "") || "0";
+        }),
+        page.evaluate(() => {
+          const el = document.getElementById("tdf_142");
+          return el?.textContent?.trim().replace(/[^0-9.]/g, "") || "0";
+        }),
+      ]);
+      if (directResults.some((val) => parseFloat(val) > 0)) {
+        costResults.splice(0, costResults.length, ...directResults);
+      }
+    }
+    const [Costcase, totalLabour, overheadCost] = costResults.map(
+      (val) => parseFloat(val) || 0
+    );
+    return { Costcase, totalLabour, OverheadCostperjob: overheadCost };
+  };
+
+  // Validation and re-filling logic
+  const validateAndRefill = async () => {
+    // Re-verify all critical fields in Finished Bag Information
+    const criticalFields = [
+      "Face Width mm",
+      "Gusset mm",
+      "Bag Length mm",
+      "Bags per box",
+      "No of Boxes Ordered",
+    ];
+    for (const fieldName of criticalFields) {
+      try {
+        const instruction = `Find the input field labeled "${fieldName}"`;
+        const [field] = await page.observe({ instruction });
+        if (field && field.selector) {
+          const currentValue = await page.$eval(
+            field.selector,
+            (el: any) => el.value
+          );
+          if (!currentValue || currentValue === "0") {
+            stagehand.log({
+              message: `Found empty/zero value for ${fieldName}, attempting to re-enter`,
+            });
+            // Re-enter the value based on formData
+            let valueToEnter = "";
+            if (fieldName === "Bags per box") {
+              valueToEnter = extractNumeric(formData["Pack size"]);
+            } else if (fieldName === "No of Boxes Ordered") {
+              valueToEnter = extractNumeric(formData["No of packs ordered"]);
+            } else {
+              valueToEnter = extractNumeric(
+                formData[fieldName as keyof FormData] || ""
+              );
+            }
+            if (valueToEnter) {
+              await page.fill(field.selector, valueToEnter);
+              stagehand.log({
+                message: `Re-entered ${fieldName} with ${valueToEnter}`,
+              });
+              await page.waitForTimeout(500);
+            }
+          }
+        }
+      } catch (error: any) {
+        stagehand.log({
+          message: `Error validating ${fieldName}: ${error.message}`,
+        });
+      }
+    }
+    // Re-verify BAG PAPER selection
+    try {
+      const instruction = 'Find the input field containing "BAG PAPER"';
+      const [field] = await page.observe({ instruction });
+      if (field && field.selector) {
+        const currentValue = await page.$eval(
+          field.selector,
+          (el: any) => el.value
+        );
+        if (!currentValue) {
+          stagehand.log({
+            message: "BAG PAPER not selected, attempting to re-select",
+          });
+          await page.act('Click the input field labeled "BAG PAPER"');
+          await page.waitForTimeout(500);
+          await page.act('Type " " into the "BAG PAPER" input');
+          await page.waitForTimeout(500);
+          await page.keyboard.press("Enter");
+          await page.waitForTimeout(1000);
+        }
+      }
+    } catch (error: any) {
+      stagehand.log({
+        message: `Error validating BAG PAPER: ${error.message}`,
+      });
+    }
+    // Wait for recalculation and try to get the values again
+    await page.waitForTimeout(2000);
+    try {
+      const instruction = 'Find the input field containing "Box Type*"';
+      const [field] = await page.observe({ instruction });
+      if (field && field.selector) {
+        const currentValue = await page.$eval(
+          field.selector,
+          (el: any) => el.value
+        );
+        if (!currentValue) {
+          stagehand.log({
+            message: "Box Type not selected, attempting to re-select",
+          });
+          await page.act('Click the input field labeled "Box Type*"');
+          await page.waitForTimeout(500);
+          await page.act('Type " " into the "Box Type" input');
+          await page.waitForTimeout(500);
+          await page.keyboard.press("Enter");
+          await page.waitForTimeout(1000);
+        }
+      }
+    } catch (error: any) {
+      stagehand.log({
+        message: `Error validating Box Type: ${error.message}`,
+      });
+    }
+    await page.waitForTimeout(5000);
+  };
+
+  // Retry loop
+  const maxRetries = 3;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    stagehand.log({ message: `Cost extraction attempt ${attempt}` });
+    const costSummary = await getCostValues();
+    stagehand.log({
+      message: `Attempt ${attempt} - Cost values: ${JSON.stringify(
+        costSummary
+      )}`,
+    });
+    if (
+      costSummary.Costcase > 0 &&
+      costSummary.totalLabour > 0 &&
+      costSummary.OverheadCostperjob > 0
+    ) {
+      return costSummary;
+    }
+    if (attempt < maxRetries) {
+      stagehand.log({
+        message: `Detected zero values in cost summary. Attempting to validate and fix entries... (attempt ${attempt})`,
+      });
+      await validateAndRefill();
+    }
+  }
+  // Final attempt, return whatever we have
+  stagehand.log({
+    message: `Returning cost summary after max retries.`,
+  });
+  return await getCostValues();
+}
+
+// Helper to extract all filled form field values by label
+async function extractFilledFields(
+  page: Page,
+  formData: FormData,
+  stagehand: Stagehand
+): Promise<Record<string, string>> {
+  const fieldLabels = [
+    "Description",
+    "Bag type",
+    "Face Width mm",
+    "Gusset mm",
+    "Bag Length mm",
+    "Bottom glue",
+    "Packed in",
+    "Pack size",
+    "No of packs ordered",
+    "Machine",
+    "Machines per supervisor",
+    "Bags per box",
+    "No of Boxes Ordered",
+    "Boxes per Pallet",
+    // Add more if needed
+  ];
+  const filled: Record<string, string> = {};
+  for (const label of fieldLabels) {
+    try {
+      const instruction = `Find the input field labeled "${label}"`;
+      const [field] = await page.observe({ instruction });
+      if (field && field.selector) {
+        const value = await page.$eval(field.selector, (el: any) => el.value);
+        filled[label] = value;
+      }
+    } catch (e) {
+      stagehand.log({ message: `Could not extract value for field: ${label}` });
+    }
+  }
+  return filled;
+}
+
 export async function main({
   page,
   context,
@@ -55,8 +316,6 @@ export async function main({
     });
     throw new Error(errorMessage);
   }
-
-  // Removed the extra closing brace that was here
 
   let bagPaperPriceOverride: string | number | undefined;
   if (costOverrides) {
@@ -134,11 +393,6 @@ export async function main({
           "Collapse Side Panel button not found or not clickable, proceeding.",
       });
     }
-
-    // Helper function to extract numeric values
-    const extractNumeric = (value: string): string => {
-      return value.replace(/[^0-9.]/g, "");
-    };
 
     // 6. Fill the Form
     stagehand.log({ message: "Starting structured form filling" });
@@ -425,7 +679,7 @@ export async function main({
         message: `Error with "Boxes per Pallet": ${error.message}`,
       });
     }
-
+    await page.waitForTimeout(2000);
     await page.act("scroll to the bottom of the page");
     await page.act("scroll the modal to the next chunk");
     // Section 3: Production data
@@ -481,270 +735,17 @@ export async function main({
     // 8. Extract cost summary data
     stagehand.log({ message: "Extracting cost summary data" });
     try {
-      // First attempt: Try XPath approach
-      const costResults = await Promise.all<string>([
-        // Cost £/case
-        page.evaluate(() => {
-          const el =
-            document.evaluate(
-              '//td[contains(., "Cost £/case")]/following-sibling::td[1]',
-              document,
-              null,
-              XPathResult.FIRST_ORDERED_NODE_TYPE,
-              null
-            ).singleNodeValue || document.getElementById("tdf_153");
-
-          return el?.textContent?.trim().replace(/[^0-9.]/g, "") || "0";
-        }),
-        // Total Labour & Sup'n £/job
-        page.evaluate(() => {
-          const el =
-            document.evaluate(
-              '//td[contains(., "Total Labour & Sup")]/following-sibling::td[1]',
-              document,
-              null,
-              XPathResult.FIRST_ORDERED_NODE_TYPE,
-              null
-            ).singleNodeValue || document.getElementById("tdf_137");
-
-          return el?.textContent?.trim().replace(/[^0-9.]/g, "") || "0";
-        }),
-        // Overhead Cost/job
-        page.evaluate(() => {
-          const el =
-            document.evaluate(
-              '//td[contains(., "Overhead Cost/job")]/following-sibling::td[1]',
-              document,
-              null,
-              XPathResult.FIRST_ORDERED_NODE_TYPE,
-              null
-            ).singleNodeValue || document.getElementById("tdf_142");
-
-          return el?.textContent?.trim().replace(/[^0-9.]/g, "") || "0";
-        }),
-      ]);
-
-      stagehand.log({
-        message: `Raw cost values: ${JSON.stringify(costResults, null, 2)}`,
+      const costSummary = await extractAndValidateCostSummary({
+        page,
+        formData,
+        stagehand,
       });
-
-      // If all values are still 0, try direct ID approach as last resort
-      if (costResults.every((val) => parseFloat(val) === 0)) {
-        stagehand.log({
-          message: "Primary extraction failed, trying direct ID approach",
-        });
-
-        const directResults = await Promise.all<string>([
-          page.evaluate(() => {
-            const el = document.getElementById("tdf_153");
-            return el?.textContent?.trim().replace(/[^0-9.]/g, "") || "0";
-          }),
-          page.evaluate(() => {
-            const el = document.getElementById("tdf_137");
-            return el?.textContent?.trim().replace(/[^0-9.]/g, "") || "0";
-          }),
-          page.evaluate(() => {
-            const el = document.getElementById("tdf_142");
-            return el?.textContent?.trim().replace(/[^0-9.]/g, "") || "0";
-          }),
-        ]);
-
-        if (directResults.some((val) => parseFloat(val) > 0)) {
-          stagehand.log({
-            message: `Direct ID extraction succeeded: ${JSON.stringify(
-              directResults,
-              null,
-              2
-            )}`,
-          });
-          costResults.splice(0, costResults.length, ...directResults);
-        }
-      }
-
-      const [Costcase, totalLabour, overheadCost] = costResults.map(
-        (val) => parseFloat(val) || 0
-      );
-
-      stagehand.log({
-        message: `Parsed cost values:
-          Cost per case: ${Costcase}
-          Total Labour & Sup: ${totalLabour}
-          Overhead Cost per job: ${overheadCost}`,
-      });
-
-      // Create the cost summary object
-      const costSummary = {
-        Costcase: Costcase,
-        totalLabour: totalLabour,
-        OverheadCostperjob: overheadCost,
-      };
-
-      // Validate if any cost values are zero and attempt to fix
-      if (Costcase === 0 || totalLabour === 0 || overheadCost === 0) {
-        stagehand.log({
-          message:
-            "Detected zero values in cost summary. Attempting to validate and fix entries...",
-        });
-
-        // Re-verify all critical fields in Finished Bag Information
-        const criticalFields = [
-          "Face Width mm",
-          "Gusset mm",
-          "Bag Length mm",
-          "Bags per box",
-          "No of Boxes Ordered",
-        ];
-
-        for (const fieldName of criticalFields) {
-          try {
-            const instruction = `Find the input field labeled "${fieldName}"`;
-            const [field] = await page.observe({ instruction });
-
-            if (field && field.selector) {
-              const currentValue = await page.$eval(
-                field.selector,
-                (el: any) => el.value
-              );
-              if (!currentValue || currentValue === "0") {
-                stagehand.log({
-                  message: `Found empty/zero value for ${fieldName}, attempting to re-enter`,
-                });
-
-                // Re-enter the value based on formData
-                let valueToEnter = "";
-                if (fieldName === "Bags per box") {
-                  valueToEnter = extractNumeric(formData["Pack size"]);
-                } else if (fieldName === "No of Boxes Ordered") {
-                  valueToEnter = extractNumeric(
-                    formData["No of packs ordered"]
-                  );
-                } else {
-                  valueToEnter = extractNumeric(
-                    formData[fieldName as keyof FormData] || ""
-                  );
-                }
-
-                if (valueToEnter) {
-                  await page.fill(field.selector, valueToEnter);
-                  stagehand.log({
-                    message: `Re-entered ${fieldName} with ${valueToEnter}`,
-                  });
-                  await page.waitForTimeout(500);
-                }
-              }
-            }
-          } catch (error: any) {
-            stagehand.log({
-              message: `Error validating ${fieldName}: ${error.message}`,
-            });
-          }
-        }
-
-        // Re-verify BAG PAPER selection
-        try {
-          const instruction = 'Find the input field containing "BAG PAPER"';
-          const [field] = await page.observe({ instruction });
-
-          if (field && field.selector) {
-            const currentValue = await page.$eval(
-              field.selector,
-              (el: any) => el.value
-            );
-            if (!currentValue) {
-              stagehand.log({
-                message: "BAG PAPER not selected, attempting to re-select",
-              });
-              await page.act('Click the input field labeled "BAG PAPER"');
-              await page.waitForTimeout(500);
-              await page.act('Type " " into the "BAG PAPER" input');
-              await page.waitForTimeout(500);
-              await page.keyboard.press("Enter");
-              await page.waitForTimeout(1000);
-            }
-          }
-        } catch (error: any) {
-          stagehand.log({
-            message: `Error validating BAG PAPER: ${error.message}`,
-          });
-        }
-
-        // Wait for recalculation and try to get the values again
-        await page.waitForTimeout(2000);
-        try {
-          const instruction = 'Find the input field containing "Box Type*"';
-          const [field] = await page.observe({ instruction });
-
-          if (field && field.selector) {
-            const currentValue = await page.$eval(
-              field.selector,
-              (el: any) => el.value
-            );
-            if (!currentValue) {
-              stagehand.log({
-                message: "Box Type not selected, attempting to re-select",
-              });
-              await page.act('Click the input field labeled "Box Type*"');
-              await page.waitForTimeout(500);
-              await page.act('Type " " into the "Box Type" input');
-              await page.waitForTimeout(500);
-              await page.keyboard.press("Enter");
-              await page.waitForTimeout(1000);
-            }
-          }
-        } catch (error: any) {
-          stagehand.log({
-            message: `Error validating Box Type: ${error.message}`,
-          });
-        }
-        await page.waitForTimeout(5000);
-        // Re-fetch the cost values
-        const [newCostcase, newTotalLabour, newOverheadCost] =
-          await Promise.all([
-            page.evaluate(() => {
-              const el = document.getElementById("tdf_153");
-              return (
-                parseFloat(
-                  el?.textContent?.trim().replace(/[^0-9.]/g, "") || "0"
-                ) || 0
-              );
-            }),
-            page.evaluate(() => {
-              const el = document.getElementById("tdf_137");
-              return (
-                parseFloat(
-                  el?.textContent?.trim().replace(/[^0-9.]/g, "") || "0"
-                ) || 0
-              );
-            }),
-            page.evaluate(() => {
-              const el = document.getElementById("tdf_142");
-              return (
-                parseFloat(
-                  el?.textContent?.trim().replace(/[^0-9.]/g, "") || "0"
-                ) || 0
-              );
-            }),
-          ]);
-
-        // Update cost summary with new values
-        costSummary.Costcase = newCostcase || Costcase;
-        costSummary.totalLabour = newTotalLabour || totalLabour;
-        costSummary.OverheadCostperjob = newOverheadCost || overheadCost;
-
-        stagehand.log({
-          message: `Updated cost summary after validation: ${JSON.stringify(
-            costSummary,
-            null,
-            2
-          )}`,
-        });
-      }
-
+      // Extract all filled field values
+      const filledFields = await extractFilledFields(page, formData, stagehand);
       stagehand.log({
         message: `Final cost summary: ${JSON.stringify(costSummary, null, 2)}`,
       });
-
-      return costSummary;
+      return { costSummary, filledFields };
     } catch (error: any) {
       stagehand.log({
         message: `Error extracting cost summary data: ${error.message}`,

@@ -22,6 +22,7 @@ const ses = new AWS.SES();
 async function sendCostingSummaryEmail(
   toEmail: string,
   costSummary: any,
+  filledFields: Record<string, string>,
   specSheetId: string
 ): Promise<void> {
   const params = {
@@ -57,6 +58,23 @@ async function sendCostingSummaryEmail(
                                 )}</td>
                             </tr>
                            
+                        </table>
+                        <h3 style="margin-top:32px;">Filled Form Values</h3>
+                        <table style="border-collapse: collapse; width: 100%; max-width: 600px;">
+                          <tr style="background-color: #f9f9f9;">
+                            <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Field</th>
+                            <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Value</th>
+                          </tr>
+                          ${Object.entries(filledFields)
+                            .map(
+                              ([key, value]) => `
+                                <tr>
+                                  <td style="padding: 10px; border: 1px solid #ddd;">${key}</td>
+                                  <td style="padding: 10px; border: 1px solid #ddd;">${value}</td>
+                                </tr>
+                              `
+                            )
+                            .join("")}
                         </table>
                     `,
         },
@@ -97,7 +115,7 @@ router.post("/calculate-costs", async (req, res) => {
     }
 
     // Run the browserbase automation
-    const costSummary = await runBrowserbaseAutomation({
+    const { costSummary, filledFields } = await runBrowserbaseAutomation({
       page: stagehand.page,
       context: stagehand.context,
       stagehand,
@@ -110,12 +128,18 @@ router.post("/calculate-costs", async (req, res) => {
     }
 
     // Send email with results
-    await sendCostingSummaryEmail(sender_email, costSummary, spec_sheet_id);
+    await sendCostingSummaryEmail(
+      sender_email,
+      costSummary,
+      filledFields,
+      spec_sheet_id
+    );
 
     res.json({
       success: true,
       message: "Costing calculation completed and email sent",
       costSummary,
+      filledFields,
     });
   } catch (error: any) {
     console.error("Error in calculate-costs endpoint:", error);
