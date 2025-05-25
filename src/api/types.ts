@@ -22,5 +22,5 @@ export interface CostingRequestPayload {
   formData: FormDataPayload;
   costOverrides: CostOverridePayload[];
   sender_email: string;
-  spec_sheet_id: string;
+  specSheetId: string;
 }

@@ -101,7 +101,7 @@ router.post("/calculate-costs", async (req, res) => {
       formData,
       costOverrides,
       sender_email,
-      spec_sheet_id,
+      specSheetId,
     }: CostingRequestPayload = req.body;
 
     // Initialize Stagehand
@@ -132,7 +132,7 @@ router.post("/calculate-costs", async (req, res) => {
       sender_email,
       costSummary,
       filledFields,
-      spec_sheet_id
+      specSheetId
     );
 
     res.json({
