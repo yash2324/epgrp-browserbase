@@ -24,3 +24,18 @@ export interface CostingRequestPayload {
   sender_email: string;
   specSheetId: string;
 }
+
+export interface MultipleCostingRequestPayload {
+  specSheetId: string;
+  emailId: string;
+  formData: FormDataPayload;
+  costOverrides: CostOverridePayload[];
+  sender_email: string;
+  spec_sheet_id: string;
+  trackingId: string;
+  rowIndex: number;
+}
+
+export interface MultipleCostingRequest {
+  payloads: MultipleCostingRequestPayload[];
+}

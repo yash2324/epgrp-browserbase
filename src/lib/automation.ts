@@ -36,6 +36,134 @@ const extractNumeric = (value: string): string => {
   return value.replace(/[^0-9.]/g, "");
 };
 
+// Enhanced helper function to select and verify BAG PAPER with immediate retry
+async function selectAndVerifyBagPaper(
+  page: Page,
+  stagehand: Stagehand
+): Promise<boolean> {
+  const maxRetries = 2;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      stagehand.log({ message: `BAG PAPER selection attempt ${attempt}` });
+
+      // Click the input to focus it
+      await page.act('Click the input field labeled "BAG PAPER"');
+      await page.waitForTimeout(500);
+
+      // Type a space to trigger the dropdown
+      await page.act('Type " " into the "BAG PAPER" input');
+      await page.waitForTimeout(500);
+      await page.keyboard.press("Enter");
+      await page.waitForTimeout(500);
+
+      // Immediately verify the selection
+      stagehand.log({ message: "Verifying BAG PAPER selection..." });
+      const instruction = 'Find the input field containing "BAG PAPER"';
+      const [field] = await page.observe({ instruction });
+
+      if (field && field.selector) {
+        const currentValue = await page.$eval(
+          field.selector,
+          (el: any) => el.value
+        );
+        stagehand.log({
+          message: `BAG PAPER current value: "${currentValue}"`,
+        });
+
+        if (currentValue && currentValue.trim() !== "") {
+          stagehand.log({
+            message: `BAG PAPER successfully selected: "${currentValue}"`,
+          });
+          return true;
+        }
+      }
+
+      if (attempt < maxRetries) {
+        stagehand.log({
+          message: `BAG PAPER not properly selected, retrying...`,
+        });
+        await page.waitForTimeout(500);
+      }
+    } catch (error: any) {
+      stagehand.log({
+        message: `BAG PAPER selection attempt ${attempt} failed: ${error.message}`,
+      });
+      if (attempt < maxRetries) {
+        await page.waitForTimeout(500);
+      }
+    }
+  }
+
+  stagehand.log({ message: "BAG PAPER selection failed after all retries" });
+  return false;
+}
+
+// Enhanced helper function to select and verify Box Type with immediate retry
+async function selectAndVerifyBoxType(
+  page: Page,
+  stagehand: Stagehand
+): Promise<boolean> {
+  const maxRetries = 2;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      stagehand.log({ message: `Box Type selection attempt ${attempt}` });
+
+      // Click the input to focus it
+      await page.act('Click the input field labeled "Box Type*"');
+      await page.waitForTimeout(500);
+
+      // Type a space to trigger the dropdown
+      await page.act('Type " " into the "Box Type" input');
+      await page.waitForTimeout(500);
+
+      // Press ArrowDown and Enter to select the first option
+      await page.keyboard.press("ArrowDown");
+      await page.waitForTimeout(500);
+      await page.keyboard.press("Enter");
+      await page.waitForTimeout(500);
+
+      // Immediately verify the selection
+      stagehand.log({ message: "Verifying Box Type selection..." });
+      const instruction = 'Find the input field containing "Box Type*"';
+      const [field] = await page.observe({ instruction });
+
+      if (field && field.selector) {
+        const currentValue = await page.$eval(
+          field.selector,
+          (el: any) => el.value
+        );
+        stagehand.log({ message: `Box Type current value: "${currentValue}"` });
+
+        if (currentValue && currentValue.trim() !== "") {
+          stagehand.log({
+            message: `Box Type successfully selected: "${currentValue}"`,
+          });
+          return true;
+        }
+      }
+
+      if (attempt < maxRetries) {
+        stagehand.log({
+          message: `Box Type not properly selected, retrying...`,
+        });
+        await page.waitForTimeout(500);
+      }
+    } catch (error: any) {
+      stagehand.log({
+        message: `Box Type selection attempt ${attempt} failed: ${error.message}`,
+      });
+      if (attempt < maxRetries) {
+        await page.waitForTimeout(500);
+      }
+    }
+  }
+
+  stagehand.log({ message: "Box Type selection failed after all retries" });
+  return false;
+}
+
 // Helper function to extract and validate cost summary
 async function extractAndValidateCostSummary({
   page,
@@ -166,59 +294,16 @@ async function extractAndValidateCostSummary({
         });
       }
     }
-    // Re-verify BAG PAPER selection
-    try {
-      const instruction = 'Find the input field containing "BAG PAPER"';
-      const [field] = await page.observe({ instruction });
-      if (field && field.selector) {
-        const currentValue = await page.$eval(
-          field.selector,
-          (el: any) => el.value
-        );
-        if (!currentValue) {
-          stagehand.log({
-            message: "BAG PAPER not selected, attempting to re-select",
-          });
-          await page.act('Click the input field labeled "BAG PAPER"');
-          await page.waitForTimeout(500);
-          await page.act('Type " " into the "BAG PAPER" input');
-          await page.waitForTimeout(500);
-          await page.keyboard.press("Enter");
-          await page.waitForTimeout(1000);
-        }
-      }
-    } catch (error: any) {
-      stagehand.log({
-        message: `Error validating BAG PAPER: ${error.message}`,
-      });
-    }
-    // Wait for recalculation and try to get the values again
-    await page.waitForTimeout(2000);
-    try {
-      const instruction = 'Find the input field containing "Box Type*"';
-      const [field] = await page.observe({ instruction });
-      if (field && field.selector) {
-        const currentValue = await page.$eval(
-          field.selector,
-          (el: any) => el.value
-        );
-        if (!currentValue) {
-          stagehand.log({
-            message: "Box Type not selected, attempting to re-select",
-          });
-          await page.act('Click the input field labeled "Box Type*"');
-          await page.waitForTimeout(500);
-          await page.act('Type " " into the "Box Type" input');
-          await page.waitForTimeout(500);
-          await page.keyboard.press("Enter");
-          await page.waitForTimeout(1000);
-        }
-      }
-    } catch (error: any) {
-      stagehand.log({
-        message: `Error validating Box Type: ${error.message}`,
-      });
-    }
+
+    // Re-verify BAG PAPER selection with enhanced retry
+    stagehand.log({ message: "Re-verifying BAG PAPER selection..." });
+    await selectAndVerifyBagPaper(page, stagehand);
+
+    // Re-verify Box Type selection with enhanced retry
+    stagehand.log({ message: "Re-verifying Box Type selection..." });
+    await selectAndVerifyBoxType(page, stagehand);
+
+    // Wait for recalculation
     await page.waitForTimeout(5000);
   };
 
@@ -274,7 +359,6 @@ async function extractFilledFields(
     "Bags per box",
     "No of Boxes Ordered",
     "Boxes per Pallet",
-    // Add more if needed
   ];
   const filled: Record<string, string> = {};
   for (const label of fieldLabels) {
@@ -363,7 +447,7 @@ export async function main({
     });
 
     // 3. Open SOS Costings
-    await page.waitForTimeout(10000);
+    await page.waitForTimeout(500);
     const [sosCostingsAction] = await page.observe({
       instruction: 'Find and click the "SOS Costings" link or button',
     });
@@ -372,7 +456,7 @@ export async function main({
     stagehand.log({ message: "Opened 'SOS Costings' section" });
 
     // 4. Create New Costing
-    await page.waitForTimeout(5000);
+    await page.waitForTimeout(500);
     const [newCostingAction] = await page.observe({
       instruction: "Find and click the New SOS costing button",
     });
@@ -380,7 +464,7 @@ export async function main({
     stagehand.log({ message: "Clicked 'New SOS costing' button" });
 
     // 5. Collapse
-    await page.waitForTimeout(5000);
+    await page.waitForTimeout(500);
     try {
       const [collapseAction] = await page.observe({
         instruction: 'Find and click the "Collapse Side Panel" button',
@@ -402,7 +486,7 @@ export async function main({
 
     // Description (non-numeric, keep as is)
     try {
-      await page.waitForTimeout(5000);
+      await page.waitForTimeout(500);
       const instruction = 'Find the input field labeled "Description"';
       stagehand.log({ message: `Attempting to observe: ${instruction}` });
       const [field] = await page.observe({ instruction });
@@ -517,25 +601,14 @@ export async function main({
     // Section 2: Materials
     stagehand.log({ message: "Filling Section 2: Materials" });
 
-    // BAG PAPER (select first option)
-    try {
-      stagehand.log({ message: "Attempting to select BAG PAPER" });
-      // Click the input to focus it
-      await page.act('Click the input field labeled "BAG PAPER"');
-      await page.waitForTimeout(500);
-
-      // Type a space to trigger the dropdown
-      await page.act('Type " " into the "BAG PAPER" input');
-      await page.waitForTimeout(500);
-      await page.keyboard.press("Enter");
-
-      stagehand.log({ message: "Selected first option for BAG PAPER" });
-      await page.waitForTimeout(1000);
-    } catch (error: any) {
+    // BAG PAPER (select first option) - Enhanced with immediate verification and retry
+    const bagPaperSuccess = await selectAndVerifyBagPaper(page, stagehand);
+    if (!bagPaperSuccess) {
       stagehand.log({
-        message: `Error selecting first option for "BAG PAPER": ${error.message}`,
+        message: "WARNING: BAG PAPER selection may have failed",
       });
     }
+
     try {
       if (bagPaperPriceOverride !== undefined) {
         const instruction =
@@ -576,7 +649,7 @@ export async function main({
         stagehand.log({
           message: `Selected "${valueToSelect}" for "Packed in"`,
         });
-        await page.waitForTimeout(1000); // Allow time for new fields to appear
+        await page.waitForTimeout(500); // Allow time for new fields to appear
       } else {
         stagehand.log({
           message: `Could not observe: ${instruction}. Skipping.`,
@@ -586,28 +659,10 @@ export async function main({
       stagehand.log({ message: `Error with "Packed in": ${error.message}` });
     }
 
-    // Box type (select first option, appears after "Packed in" is "Box")
-    try {
-      stagehand.log({ message: "Attempting to select Box type" });
-      // Click the input to focus it
-      await page.act('Click the input field labeled "Box type"');
-      await page.waitForTimeout(500);
-
-      // Type a space to trigger the dropdown
-      await page.act('Type " " into the "Box type" input');
-      await page.waitForTimeout(1000);
-
-      // Press ArrowDown and Enter to select the first option
-      await page.keyboard.press("ArrowDown");
-      await page.waitForTimeout(500);
-      await page.keyboard.press("Enter");
-
-      stagehand.log({ message: "Selected first option for Box type" });
-      await page.waitForTimeout(1000);
-    } catch (error: any) {
-      stagehand.log({
-        message: `Error selecting first option for "Box type": ${error.message}`,
-      });
+    // Box type (select first option, appears after "Packed in" is "Box") - Enhanced with immediate verification and retry
+    const boxTypeSuccess = await selectAndVerifyBoxType(page, stagehand);
+    if (!boxTypeSuccess) {
+      stagehand.log({ message: "WARNING: Box Type selection may have failed" });
     }
 
     // Bags per box (numeric)
@@ -665,6 +720,9 @@ export async function main({
       if (field && field.selector) {
         await page.waitForSelector(field.selector, { timeout: 15000 });
         await page.fill(field.selector, valueToFill);
+        await page.act(
+          "Click anywhere outside the field or click tab before moving forward"
+        );
         stagehand.log({
           message: `Filled "Boxes per Pallet" with "${valueToFill}"`,
         });
@@ -679,7 +737,7 @@ export async function main({
         message: `Error with "Boxes per Pallet": ${error.message}`,
       });
     }
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(500);
     await page.act("scroll to the bottom of the page");
     await page.act("scroll the modal to the next chunk");
     // Section 3: Production data
@@ -729,7 +787,7 @@ export async function main({
       });
     }
 
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(500);
     stagehand.log({ message: "Scrolled to bottom of the page" });
 
     // 8. Extract cost summary data
