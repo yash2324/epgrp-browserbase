@@ -7,9 +7,9 @@ export interface FormDataPayload {
   "Bag Length mm": string;
   "Bottom glue": string;
   "Packed in": string;
-  "Pack size": string;
-  "No of packs ordered": string;
-  Machine: string;
+  "Pack Size": string;
+  "No of boxes ordered": string;
+  "Bags per box": string;
   "Machines per supervisor": string;
 }
 

@@ -284,7 +284,7 @@ async function processAutomation(payload: MultipleCostingRequestPayload) {
 async function processInBatches<T, R>(
   items: T[],
   processor: (item: T) => Promise<R>,
-  batchSize: number = 3
+  batchSize: number = 2
 ): Promise<R[]> {
   const results: R[] = [];
 

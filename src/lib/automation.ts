@@ -13,9 +13,9 @@ interface FormData {
   "Bag Length mm": string;
   "Bottom glue": string;
   "Packed in": string;
-  "Pack size": string;
-  "No of packs ordered": string;
-  Machine: string;
+  "Pack Size": string;
+  "No of boxes ordered": string;
+  "Bags per box": string;
   "Machines per supervisor": string;
 }
 
@@ -35,7 +35,142 @@ const costSummarySchema = z.object({
 const extractNumeric = (value: string): string => {
   return value.replace(/[^0-9.]/g, "");
 };
+async function selectAndVerifyMachineType(
+  page: Page,
+  stagehand: Stagehand
+): Promise<boolean> {
+  const maxRetries = 2;
+  const targetMachine = "SOS 12 (1B) 50,000/shift";
 
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      stagehand.log({ message: `Machine selection attempt ${attempt}` });
+
+      // Click the Machine input field to focus it
+      await page.act('Click the input field labeled "Machine"');
+      await page.waitForTimeout(500);
+
+      // Clear the current selection by clicking the clear button (×)
+      try {
+        await page.act(
+          "Click the clear button (×) in the Machine field to remove the current selection"
+        );
+        await page.waitForTimeout(500);
+      } catch (clearError) {
+        stagehand.log({
+          message: "Clear button not found, trying to select all and delete",
+        });
+        // Alternative: Select all and delete
+        await page.keyboard.press("Ctrl+A");
+        await page.keyboard.press("Delete");
+        await page.waitForTimeout(500);
+      }
+
+      // Type the target machine name to search
+      await page.act(`Type "${targetMachine}" into the Machine input`);
+      await page.waitForTimeout(1000);
+
+      // Press Enter to select the first matching option
+      await page.keyboard.press("Enter");
+      await page.waitForTimeout(500);
+
+      // Verify the selection using extract
+      stagehand.log({ message: "Verifying Machine selection..." });
+
+      // Check if the target machine is selected in the React Select component
+      const selectedValueResult = await page.extract({
+        instruction:
+          "Extract the selected value from the Machine field. Look for text inside elements with class 'Select-value-label' in the Machine row.",
+        schema: z.object({
+          selectedValue: z
+            .string()
+            .describe(
+              "the selected Machine value, or empty string if none selected"
+            ),
+        }),
+      });
+
+      // Also check if there's a placeholder indicating no selection
+      const placeholderResult = await page.extract({
+        instruction:
+          "Check if the Machine field shows a placeholder like 'Search and select'. Look for elements with class 'Select-placeholder' in the Machine row.",
+        schema: z.object({
+          hasPlaceholder: z
+            .boolean()
+            .describe(
+              "true if placeholder text like 'Search and select' is visible"
+            ),
+          placeholderText: z
+            .string()
+            .describe("the placeholder text if visible, or empty string"),
+        }),
+      });
+
+      stagehand.log({
+        message: `Machine extraction results - Selected: "${selectedValueResult.selectedValue}", Placeholder: ${placeholderResult.hasPlaceholder} ("${placeholderResult.placeholderText}")`,
+      });
+
+      // Check if we have the correct selection
+      const hasCorrectSelection =
+        selectedValueResult.selectedValue &&
+        selectedValueResult.selectedValue.includes("SOS 12") &&
+        selectedValueResult.selectedValue.includes("1B") &&
+        selectedValueResult.selectedValue.includes("50,000/shift") &&
+        !placeholderResult.hasPlaceholder;
+
+      if (hasCorrectSelection) {
+        stagehand.log({
+          message: `Machine successfully selected: "${selectedValueResult.selectedValue}"`,
+        });
+        return true;
+      }
+
+      // Additional fallback check using the select element value
+      const fallbackCheck = await page.extract({
+        instruction:
+          "Find the select element with name '_fid_539' in the Machine row and check its selected option value or text",
+        schema: z.object({
+          selectValue: z
+            .string()
+            .describe(
+              "the value or text of the selected option in the select element, or empty if none selected"
+            ),
+        }),
+      });
+
+      if (
+        fallbackCheck.selectValue &&
+        (fallbackCheck.selectValue.includes("SOS 12") ||
+          fallbackCheck.selectValue.includes("1B") ||
+          fallbackCheck.selectValue.includes("50,000"))
+      ) {
+        stagehand.log({
+          message: `Machine selection confirmed via fallback check: "${fallbackCheck.selectValue}"`,
+        });
+        return true;
+      }
+
+      if (attempt < maxRetries) {
+        stagehand.log({
+          message: `Machine not properly selected (got: "${selectedValueResult.selectedValue}"), retrying...`,
+        });
+        await page.waitForTimeout(500);
+      }
+    } catch (error: any) {
+      stagehand.log({
+        message: `Machine selection attempt ${attempt} failed: ${error.message}`,
+      });
+      if (attempt < maxRetries) {
+        await page.waitForTimeout(500);
+      }
+    }
+  }
+
+  stagehand.log({
+    message: `Machine selection failed after all retries. Target was: "${targetMachine}"`,
+  });
+  return false;
+}
 // Enhanced helper function to select and verify BAG PAPER with immediate retry
 async function selectAndVerifyBagPaper(
   page: Page,
@@ -57,26 +192,74 @@ async function selectAndVerifyBagPaper(
       await page.keyboard.press("Enter");
       await page.waitForTimeout(500);
 
-      // Immediately verify the selection
+      // Verify the selection using extract
       stagehand.log({ message: "Verifying BAG PAPER selection..." });
-      const instruction = 'Find the input field containing "BAG PAPER"';
-      const [field] = await page.observe({ instruction });
 
-      if (field && field.selector) {
-        const currentValue = await page.$eval(
-          field.selector,
-          (el: any) => el.value
-        );
+      // First, check if there's a selected value in the React Select component
+      const selectedValueResult = await page.extract({
+        instruction:
+          "Extract the selected value from the BAG PAPER field. Look for text inside elements with class 'Select-value-label' in the BAG PAPER row.",
+        schema: z.object({
+          selectedValue: z
+            .string()
+            .describe(
+              "the selected BAG PAPER value, or empty string if none selected"
+            ),
+        }),
+      });
+
+      // Also check if there's a placeholder indicating no selection
+      const placeholderResult = await page.extract({
+        instruction:
+          "Check if the BAG PAPER field shows a placeholder like 'Search and select'. Look for elements with class 'Select-placeholder' in the BAG PAPER row.",
+        schema: z.object({
+          hasPlaceholder: z
+            .boolean()
+            .describe(
+              "true if placeholder text like 'Search and select' is visible"
+            ),
+          placeholderText: z
+            .string()
+            .describe("the placeholder text if visible, or empty string"),
+        }),
+      });
+
+      stagehand.log({
+        message: `BAG PAPER extraction results - Selected: "${selectedValueResult.selectedValue}", Placeholder: ${placeholderResult.hasPlaceholder} ("${placeholderResult.placeholderText}")`,
+      });
+
+      const hasValidSelection =
+        selectedValueResult.selectedValue &&
+        selectedValueResult.selectedValue.trim() !== "" &&
+        !placeholderResult.hasPlaceholder;
+
+      if (hasValidSelection) {
         stagehand.log({
-          message: `BAG PAPER current value: "${currentValue}"`,
+          message: `BAG PAPER successfully selected: "${selectedValueResult.selectedValue}"`,
         });
+        return true;
+      }
+      const fallbackCheck = await page.extract({
+        instruction:
+          "Find the select element with name '_fid_477' in the BAG PAPER row and check its selected option value",
+        schema: z.object({
+          selectValue: z
+            .string()
+            .describe(
+              "the value of the selected option in the select element, or empty if none selected"
+            ),
+        }),
+      });
 
-        if (currentValue && currentValue.trim() !== "") {
-          stagehand.log({
-            message: `BAG PAPER successfully selected: "${currentValue}"`,
-          });
-          return true;
-        }
+      if (
+        fallbackCheck.selectValue &&
+        fallbackCheck.selectValue.trim() !== "" &&
+        fallbackCheck.selectValue !== "x3recpcker#"
+      ) {
+        stagehand.log({
+          message: `BAG PAPER selection confirmed via fallback check: "${fallbackCheck.selectValue}"`,
+        });
+        return true;
       }
 
       if (attempt < maxRetries) {
@@ -124,26 +307,77 @@ async function selectAndVerifyBoxType(
       await page.keyboard.press("Enter");
       await page.waitForTimeout(500);
 
-      // Immediately verify the selection
+      // Verify the selection using extract
       stagehand.log({ message: "Verifying Box Type selection..." });
-      const instruction = 'Find the input field containing "Box Type*"';
-      const [field] = await page.observe({ instruction });
 
-      if (field && field.selector) {
-        const currentValue = await page.$eval(
-          field.selector,
-          (el: any) => el.value
-        );
-        stagehand.log({ message: `Box Type current value: "${currentValue}"` });
+      // First, check if there's a selected value in the React Select component
+      const selectedValueResult = await page.extract({
+        instruction:
+          "Extract the selected value from the Box Type field. Look for text inside elements with class 'Select-value-label' in the Box Type row.",
+        schema: z.object({
+          selectedValue: z
+            .string()
+            .describe(
+              "the selected Box Type value, or empty string if none selected"
+            ),
+        }),
+      });
 
-        if (currentValue && currentValue.trim() !== "") {
+      // Also check if there's a placeholder indicating no selection
+      const placeholderResult = await page.extract({
+        instruction:
+          "Check if the Box Type field shows a placeholder like 'Search and select'. Look for elements with class 'Select-placeholder' in the Box Type row.",
+        schema: z.object({
+          hasPlaceholder: z
+            .boolean()
+            .describe(
+              "true if placeholder text like 'Search and select' is visible"
+            ),
+          placeholderText: z
+            .string()
+            .describe("the placeholder text if visible, or empty string"),
+        }),
+      });
+
+      stagehand.log({
+        message: `Box Type extraction results - Selected: "${selectedValueResult.selectedValue}", Placeholder: ${placeholderResult.hasPlaceholder} ("${placeholderResult.placeholderText}")`,
+      });
+
+      // Check if we have a valid selection
+      const hasValidSelection =
+        selectedValueResult.selectedValue &&
+        selectedValueResult.selectedValue.trim() !== "" &&
+        !placeholderResult.hasPlaceholder;
+
+      // Additional fallback check using the select element value
+      const fallbackCheck = await page.extract({
+        instruction:
+          "Find the select element with name '_fid_514' in the Box Type row and check its selected option value",
+        schema: z.object({
+          selectValue: z
+            .string()
+            .describe(
+              "the value of the selected option in the select element, or empty if none selected"
+            ),
+        }),
+      });
+
+      if (
+        fallbackCheck.selectValue &&
+        fallbackCheck.selectValue.trim() !== "" &&
+        fallbackCheck.selectValue !== "x3recpcker#"
+      ) {
+        if (
+          fallbackCheck.selectValue &&
+          fallbackCheck.selectValue.trim() !== "" &&
+          fallbackCheck.selectValue !== "x3recpcker#"
+        ) {
           stagehand.log({
-            message: `Box Type successfully selected: "${currentValue}"`,
+            message: `Box Type selection confirmed via fallback check: "${fallbackCheck.selectValue}"`,
           });
           return true;
         }
       }
-
       if (attempt < maxRetries) {
         stagehand.log({
           message: `Box Type not properly selected, retrying...`,
@@ -163,7 +397,6 @@ async function selectAndVerifyBoxType(
   stagehand.log({ message: "Box Type selection failed after all retries" });
   return false;
 }
-
 // Helper function to extract and validate cost summary
 async function extractAndValidateCostSummary({
   page,
@@ -271,9 +504,9 @@ async function extractAndValidateCostSummary({
             // Re-enter the value based on formData
             let valueToEnter = "";
             if (fieldName === "Bags per box") {
-              valueToEnter = extractNumeric(formData["Pack size"]);
+              valueToEnter = extractNumeric(formData["Bags per box"]);
             } else if (fieldName === "No of Boxes Ordered") {
-              valueToEnter = extractNumeric(formData["No of packs ordered"]);
+              valueToEnter = extractNumeric(formData["No of boxes ordered"]);
             } else {
               valueToEnter = extractNumeric(
                 formData[fieldName as keyof FormData] || ""
@@ -304,7 +537,7 @@ async function extractAndValidateCostSummary({
     await selectAndVerifyBoxType(page, stagehand);
 
     // Wait for recalculation
-    await page.waitForTimeout(5000);
+    await page.waitForTimeout(500);
   };
 
   // Retry loop
@@ -668,7 +901,7 @@ export async function main({
     // Bags per box (numeric)
     try {
       const instruction = 'Find the input field labeled "Bags per box"';
-      const numericValue = extractNumeric(formData["Pack size"]);
+      const numericValue = extractNumeric(formData["Bags per box"]);
       stagehand.log({ message: `Attempting to observe: ${instruction}` });
       const [field] = await page.observe({ instruction });
       if (field && field.selector) {
@@ -690,7 +923,7 @@ export async function main({
     // No of Boxes Ordered (numeric)
     try {
       const instruction = 'Find the input field labeled "No of Boxes Ordered"';
-      const numericValue = extractNumeric(formData["No of packs ordered"]);
+      const numericValue = extractNumeric(formData["No of boxes ordered"]);
       stagehand.log({ message: `Attempting to observe: ${instruction}` });
       const [field] = await page.observe({ instruction });
       if (field && field.selector) {
@@ -720,9 +953,7 @@ export async function main({
       if (field && field.selector) {
         await page.waitForSelector(field.selector, { timeout: 15000 });
         await page.fill(field.selector, valueToFill);
-        await page.act(
-          "Click anywhere outside the field or click tab before moving forward"
-        );
+        await page.keyboard.press("Tab");
         stagehand.log({
           message: `Filled "Boxes per Pallet" with "${valueToFill}"`,
         });
@@ -743,50 +974,12 @@ export async function main({
     // Section 3: Production data
     stagehand.log({ message: "Filling Section 3: Production data" });
 
-    // Machine (select first option)
-    try {
-      const instruction = 'Find the dropdown menu labeled "Machine"';
+    const machineSuccess = await selectAndVerifyMachineType(page, stagehand);
+    if (!machineSuccess) {
       stagehand.log({
-        message: `Attempting to observe and select first option for: ${instruction}`,
-      });
-      const [field] = await page.observe({ instruction });
-      if (field && field.selector) {
-        await page.waitForSelector(field.selector, { timeout: 10000 });
-        const selectElement = await page.$(field.selector);
-        if (selectElement) {
-          const options = await selectElement.$$("option");
-          if (options.length > 0) {
-            const firstOptionValue = await options[0].getAttribute("value");
-            if (firstOptionValue !== null && firstOptionValue !== "") {
-              await page.selectOption(field.selector, {
-                value: firstOptionValue,
-              });
-            } else {
-              await page.selectOption(field.selector, { index: 0 });
-            }
-            stagehand.log({
-              message: `Selected first option for: ${instruction}`,
-            });
-          } else {
-            stagehand.log({ message: `No options found for: ${instruction}` });
-          }
-        } else {
-          stagehand.log({
-            message: `Select element not found for: ${instruction}`,
-          });
-        }
-        await page.waitForTimeout(300);
-      } else {
-        stagehand.log({
-          message: `Could not observe: ${instruction}. Skipping.`,
-        });
-      }
-    } catch (error: any) {
-      stagehand.log({
-        message: `Error selecting first option for "Machine": ${error.message}`,
+        message: "WARNING:Machine selection may have failed",
       });
     }
-
     await page.waitForTimeout(500);
     stagehand.log({ message: "Scrolled to bottom of the page" });
 
