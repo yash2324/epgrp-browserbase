@@ -447,7 +447,7 @@ export async function main({
     });
 
     // 3. Open SOS Costings
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(5000);
     const [sosCostingsAction] = await page.observe({
       instruction: 'Find and click the "SOS Costings" link or button',
     });
@@ -456,7 +456,7 @@ export async function main({
     stagehand.log({ message: "Opened 'SOS Costings' section" });
 
     // 4. Create New Costing
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(5000);
     const [newCostingAction] = await page.observe({
       instruction: "Find and click the New SOS costing button",
     });
