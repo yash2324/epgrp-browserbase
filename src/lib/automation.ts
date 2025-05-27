@@ -583,11 +583,8 @@ async function extractFilledFields(
     "Face Width mm",
     "Gusset mm",
     "Bag Length mm",
-    "Bottom glue",
     "Packed in",
-    "Pack size",
     "No of packs ordered",
-    "Machine",
     "Machines per supervisor",
     "Bags per box",
     "No of Boxes Ordered",
@@ -947,7 +944,7 @@ export async function main({
     // Boxes per Pallet (numeric)
     try {
       const instruction = 'Find the input field labeled "Boxes per Pallet"';
-      const valueToFill = "10"; // This is already numeric
+      const valueToFill = "100";
       stagehand.log({ message: `Attempting to observe: ${instruction}` });
       const [field] = await page.observe({ instruction });
       if (field && field.selector) {
